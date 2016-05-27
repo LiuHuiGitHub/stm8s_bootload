@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace UserSerialPort
+namespace stm8s_bootload
 {
     static class Program
     {

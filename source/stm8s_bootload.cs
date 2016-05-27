@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using System.IO;
 using System.IO.Ports;
 using Utilities.IO;
 
-
-namespace UserSerialPort
+namespace stm8s_bootload
 {
     public partial class stm8s_bootload : Form
     {
@@ -18,39 +18,26 @@ namespace UserSerialPort
         const uint c_u32_bootLoadAddr = 0x9F00;
         const uint c_u32_mcuSize = 64;
 
-        uint u32_resetAddr;
-
-        FileClass appFile = new FileClass();
-        FileClass bootFile = new FileClass();
-        byte[] appArray;
+        uint u32_resetAddr = 0;
+        
+        byte[] readyCmd = { };
+        byte[] boot = { };
+        byte[] appArray = { };
 
         public stm8s_bootload()
         {
             InitializeComponent();
-            serialPortInit();
+            settingForm(false);
             Text = appName;
         }
 
         #region SerialPort
-        private void serialPortInit()
-        {
-            //初始化串口号下拉列表框
-            comboPortNum.Items.AddRange(SerialPort.GetPortNames());
-            if (comboPortNum.Items.Count > 0)
-            {
-                comboPortNum.SelectedIndex = 0;
-            }
-            comboBoxBps.Items.Add("9600");
-            comboBoxBps.Items.Add("115200");
-            comboBoxBps.SelectedIndex = 1;
-        }
-
-        private bool SerialPortOpen()
+        private bool SerialPortOpen(string com, string baud)
         {
             try
             {
-                Comm.PortName = comboPortNum.SelectedItem.ToString();
-                Comm.BaudRate = int.Parse(comboBoxBps.Text);
+                Comm.PortName = com;
+                Comm.BaudRate = int.Parse(baud);
                 Comm.Parity = Parity.None;
                 Comm.StopBits = StopBits.One;
                 Comm.DataBits = 8;
@@ -61,120 +48,50 @@ namespace UserSerialPort
 
                 Comm.Open();
 
-                ToolStripMenuItemDownLoad.Enabled = false;
+                progressBar.Enabled = false;
                 return true;
             }
             catch
             {
-                MessageBox.Show("请检查串口是否可用！"
-                    , "错误"
-                    , MessageBoxButtons.OK
-                    , MessageBoxIcon.Warning);
             }
             return false;
         }
-        private void comboPortNum_Click(object sender, EventArgs e)
-        {
-            //初始化串口号下拉列表框
-            comboPortNum.Items.Clear();
-            comboPortNum.Items.AddRange(SerialPort.GetPortNames());
-        }
-        private bool b_ReceiveFlag = false;
+
         private void SerialPortClose()
         {
-            Comm.DataReceived -= CommDataReceiveHandler;    //反注册事件，避免下次再执行进来
-            int i = Environment.TickCount;
-            while (Environment.TickCount - i < 2000 && b_ReceiveFlag)
-            {
-                Application.DoEvents();
-            }
             Comm.Close();
-            ToolStripMenuItemDownLoad.Enabled = true;
-        }
-        void CommDataReceiveHandler(object sender, SerialDataReceivedEventArgs e)
-        {
-            int rxLen = Comm.BytesToRead;
-            if (rxLen > 0)
-            {
-                b_ReceiveFlag = true;      //开始读 
-                byte[] tmpBuf = new byte[rxLen];
-                Comm.Read(tmpBuf, 0, rxLen);
-                b_ReceiveFlag = false;      //结束读
-            }
+            progressBar.Enabled = true;
         }
 
-        private void buttonSerialPortSwitch_Click(object sender, EventArgs e)
+        int commReadData(out byte[] bytes)
         {
-            if (Comm.IsOpen)
-            {
-                SerialPortClose();
-            }
-            else
-            {
-                if (SerialPortOpen())
-                {
-                    Comm.DataReceived += CommDataReceiveHandler;
-                }
-            }
+            bytes = new byte[Comm.BytesToRead];
+            Comm.Read(bytes, 0, bytes.Length);
+            //TextBoxShowString(textBoxMessage, "Rx:" + ByteArrayToHexString(bytes, " "), "\r\n");
+            return bytes.Length;
         }
-        #endregion
+        void commWriteData(byte[] bytes)
+        {
+            Comm.Write(bytes, 0, bytes.Length);
+            //TextBoxShowString(textBoxMessage, "Tx:" + ByteArrayToHexString(bytes, " "), "\r\n");
+        }
 
-        #region Strings
-        public string ByteArrayToHexString(Byte[] Bytes, string space)
-        {
-            string tmpShowString = "";
-            for (int i = 0; i < Bytes.Length; i++)//逐字节变为16进制字符，并以space隔开
-            {
-                tmpShowString += Bytes[i].ToString("X2") + space;
-            }
-            return tmpShowString;
-        }
-        public void TextBoxShowString(TextBox textBox, string str)
-        {
-            textBox.Text += str;
-            textBox.SelectionStart = textBox.Text.Length;
-            textBox.ScrollToCaret();
-        }
-        public void TextBoxShowString(TextBox textBox, string str, string newLine)
-        {
-            textBox.Text += str + newLine;
-            textBox.SelectionStart = textBox.Text.Length;
-            textBox.ScrollToCaret();
-        }
-        public void TextBoxShowString(TextBox textBox)
-        {
-            textBox.Text = null;
-        }
         #endregion
 
         #region File
-        private void openBootFile_Click(object sender, EventArgs e)
-        {
-            string strings;
-            if (bootFile.openFile("bin (*.bin)|*.bin|所有文件 (*.*)|*.*"))
-            {
-                bootFile.GetString(out strings);
-                strings = strings.Replace(" ", "");     //将原string中的空格删除
-                strings = strings.Replace("0x", "");
-                strings = strings.Replace("0X", "");
-                strings = strings.Replace(",", "");
-                strings = strings.Replace("\r\n", "");
-                tabControl.SelectTab(tabPageBoot);
-                textBoxBoot.Text = strings;
-            }
-        }
-
         private void openHexFile_Click(object sender, EventArgs e)
         {
-            if (appFile.openFile("hex (*.hex)|*.hex|所有文件 (*.*)|*.*"))
+            OpenFileDialog fp_openFile = new OpenFileDialog();
+            fp_openFile.Title = "打开APP文件";
+            fp_openFile.Filter = "hex (*.hex)|*.hex|所有文件 (*.*)|*.*";
+            if (fp_openFile.ShowDialog() == DialogResult.OK)
             {
-                tabControl.SelectTab(tabPageApp);
-                Text = appName + "  " + appFile.GetFileName();
+                Text = appName + "  " + System.IO.Path.GetFileName(fp_openFile.FileName);
 
                 HexFileStream tStream = null;
                 try
                 {
-                    tStream = new HexFileStream(appFile.GetFileLongName(), System.IO.FileMode.Open, System.IO.FileAccess.Read);
+                    tStream = new HexFileStream(fp_openFile.FileName, System.IO.FileMode.Open, System.IO.FileAccess.Read);
                     u32_resetAddr = tStream.StartLinearAddress;
                 }
                 catch (Exception Err)
@@ -186,7 +103,7 @@ namespace UserSerialPort
                 tStream.Seek(c_u32_appAddr, SeekOrigin.Begin);
                 tStream.Read(appArray, 0, appArray.Length);
                 tStream.Close();
-                textBoxApp.Text = ByteArrayToHexString(appArray, " ");
+                buttonOpenFile.BackColor = Color.DeepSkyBlue;
             }
         }
         #endregion
@@ -200,19 +117,6 @@ namespace UserSerialPort
             }
         }
 
-        int commReadData(out byte[] bytes)
-        {
-            bytes = new byte[Comm.BytesToRead];
-            Comm.Read(bytes, 0, bytes.Length);
-            TextBoxShowString(textBoxMessage, "Rx:" + ByteArrayToHexString(bytes, " "), "\r\n");
-            return bytes.Length;
-        }
-        void commWriteData(byte[] bytes)
-        {
-            Comm.Write(bytes, 0, bytes.Length);
-            TextBoxShowString(textBoxMessage, "Tx:" + ByteArrayToHexString(bytes, " "), "\r\n");
-        }
-
         int CRC16Byte(int crc16, byte x)
         {
             crc16 ^= x << 8;
@@ -223,7 +127,7 @@ namespace UserSerialPort
             return crc16;
         }
 
-        byte[] downLoadSector(byte[] bytes,byte cmd, uint sectorAddr)
+        byte[] downLoadSector(byte[] bytes, byte cmd, uint sectorAddr)
         {
             byte[] txHex, hexReplace;
             int crc = 0;
@@ -255,128 +159,154 @@ namespace UserSerialPort
             return txHex;
         }
 
-        private void DownLoad_Click(object sender, EventArgs e)
+        bool downloadStep()
         {
             bool downloadFlag = true;
             byte[] respond;
             uint sectorIndex = 0;
             string fsm_downLoadStep = "fsm_downLoadReadyCmd";
-
-            tabControl.SelectTab(tabPageMessage);
-            textBoxMessage.Text = "";
-
-            if (bootFile.openFileFlag == false)
+            while (downloadFlag)
             {
-                MessageBox.Show("Boot File Not Open"
-                    , "Error"
-                    , MessageBoxButtons.OK
-                    , MessageBoxIcon.Warning);
-            }
-            else if (appFile.openFileFlag == false)
-            {
-                MessageBox.Show("App File Not Open"
-                    , "Error"
-                    , MessageBoxButtons.OK
-                    , MessageBoxIcon.Warning);
-            }
-            else if (SerialPortOpen())
-            {
-                while (downloadFlag)
+                bool RecFlag = false;
+                respond = new byte[] { };
+                labelMessage.Text = fsm_downLoadStep;
+                switch (fsm_downLoadStep)
                 {
-                    bool RecFlag = false;
-                    respond = new byte[] { };
-                    TextBoxShowString(textBoxMessage, fsm_downLoadStep, "\r\n");
-                    switch (fsm_downLoadStep)
-                    {
-                        case "fsm_downLoadReadyCmd":
-                            commWriteData(new byte[] { 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x12, 0x13 });
-                            fsm_downLoadStep = "fsm_resetToLoader";
-                            break;
+                    case "fsm_downLoadReadyCmd":
+                        commWriteData(readyCmd);
+                        fsm_downLoadStep = "fsm_resetToLoader";
+                        break;
 
-                        case "fsm_resetToLoader":
-                            commWriteData(new byte[] { 0xaa, 0x3f, 0xd9, 0x00, 0x00, 0x80, 0xf5, 0x00, 0x00, 0x00, 0x00, 0xcc, 0xcc, 0xdd });
-                            fsm_downLoadStep = "fsm_downLoadBootSector";
-                            respond = new byte[] { 0xA9 };
-                            break;
+                    case "fsm_resetToLoader":
+                        commWriteData(new byte[] { 0xAA, 0x3F, 0xD9, 0x00, 0x00, 0x80, 0xF5, 0x00, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xDD });
+                        fsm_downLoadStep = "fsm_downLoadBootSector";
+                        respond = new byte[] { 0xA9 };
+                        break;
 
-                        case "fsm_downLoadBootSector":
-                            byte[] boot;
-                            bootFile.GetByteArray(out boot);
-                            commWriteData(boot);
-                            fsm_downLoadStep = "fsm_downLoadAppSector" + sectorIndex.ToString();
-                            respond = new byte[] { 0xAC };
-                            break;
+                    case "fsm_downLoadBootSector":
+                        commWriteData(boot);
+                        fsm_downLoadStep = "fsm_downLoadAppSector" + sectorIndex.ToString();
+                        respond = new byte[] { 0xAC };
+                        break;
 
-                        case "fsm_downLoadAppResetAddr":
-                            byte[] resetAddr = new byte[] { 0x82, 0x00, 0x82, 0x5F, 0xAA};
-                            resetAddr[2] = (byte)(u32_resetAddr>>8);
-                            resetAddr[3] = (byte)(u32_resetAddr);
-                            commWriteData(downLoadSector(resetAddr, 0xFE, 0));
-                            fsm_downLoadStep = "fsm_downLoadAppComplete";
-                            respond = new byte[] { 0xAB };
-                            break;
+                    case "fsm_downLoadAppResetAddr":
+                        byte[] resetAddr = new byte[] { 0x82, 0x00, 0x82, 0x5F, 0xAA };
+                        resetAddr[2] = (byte)(u32_resetAddr >> 8);
+                        resetAddr[3] = (byte)(u32_resetAddr);
+                        commWriteData(downLoadSector(resetAddr, 0xFE, 0));
+                        fsm_downLoadStep = "fsm_downLoadAppComplete";
+                        respond = new byte[] { 0xAB };
+                        break;
 
-                        case "fsm_downLoadAppComplete":
-                            downloadFlag = false;
-                            break;
+                    case "fsm_downLoadAppComplete":
+                        downloadFlag = false;
+                        break;
 
-                        case "fsm_downLoadAppError":
-                            downloadFlag = false;
-                            break;
-
-                        default:
-                            byte[] hex;
-                            uint sectorAddr;
-                            if (appArray.Length > (sectorIndex + 1) * c_u32_mcuSize)
-                            {
-                                hex = new byte[c_u32_mcuSize];
-                            }
-                            else
-                            {
-                                hex = new byte[appArray.Length - sectorIndex * c_u32_mcuSize];
-                                RecFlag = true;
-                            }
-                            sectorAddr = c_u32_appAddr + c_u32_mcuSize * sectorIndex;
-                            Array.Copy(appArray, sectorIndex * c_u32_mcuSize, hex, 0, hex.Length);
-                            commWriteData(downLoadSector(hex, 0x00, sectorAddr));
-
-                            if (RecFlag == true)
-                            {
-                                fsm_downLoadStep = "fsm_downLoadAppResetAddr";
-                                respond = new byte[] { 0xA7 };
-                            }
-                            else
-                            {
-                                sectorIndex++;
-                                fsm_downLoadStep = "fsm_downLoadAppSector" + sectorIndex.ToString();
-                                respond = new byte[] { 0xA7 };
-                            }
-                            break;
-                    }
-                    if (downloadFlag)
-                    {
-                        while (Comm.BytesToWrite != 0) ;
-                        delay_ms(100);
-                        byte[] request;
-                        commReadData(out request);
-                        if (respond.Length != 0)
+                    default:
+                        byte[] hex;
+                        uint sectorAddr;
+                        if (appArray.Length > (sectorIndex + 1) * c_u32_mcuSize)
                         {
-                            if(request.Length == 0 || request[0] != respond[0])
-                            {
-                                fsm_downLoadStep = "fsm_downLoadAppError";
-                            }
+                            hex = new byte[c_u32_mcuSize];
+                        }
+                        else
+                        {
+                            hex = new byte[appArray.Length - sectorIndex * c_u32_mcuSize];
+                            RecFlag = true;
+                        }
+                        sectorAddr = c_u32_appAddr + c_u32_mcuSize * sectorIndex;
+                        Array.Copy(appArray, sectorIndex * c_u32_mcuSize, hex, 0, hex.Length);
+                        commWriteData(downLoadSector(hex, 0x00, sectorAddr));
+
+                        if (RecFlag == true)
+                        {
+                            fsm_downLoadStep = "fsm_downLoadAppResetAddr";
+                            respond = new byte[] { 0xA7 };
+                        }
+                        else
+                        {
+                            sectorIndex++;
+                            fsm_downLoadStep = "fsm_downLoadAppSector" + sectorIndex.ToString();
+                            respond = new byte[] { 0xA7 };
+                        }
+                        break;
+                }
+                if (downloadFlag)
+                {
+                    while (Comm.BytesToWrite != 0) ;
+                    delay_ms(100);
+                    byte[] request;
+                    commReadData(out request);
+                    if (respond.Length != 0)
+                    {
+                        if (request.Length == 0 || request[0] != respond[0])
+                        {
+                            labelMessage.Text += "Error";
+                            downloadFlag = false;
                         }
                     }
                 }
-                SerialPortClose();
+                else if(fsm_downLoadStep == "fsm_downLoadAppComplete")
+                {
+                    return true;
+                }
+                progressBar.Value = (int)(100 * sectorIndex/(appArray.Length/ c_u32_mcuSize));
+            }
+            return false;
+        }
+
+        private void DownLoad_Click(object sender, EventArgs e)
+        {
+            bool flag;
+            if(readyCmd.Length == 0)
+            {
+                labelMessage.Text = "Ready Cmd Error";
+                return;
+            }
+            else if (boot.Length == 0)
+            {
+                labelMessage.Text = "Boot Cmd Error";
+                return;
+            }
+            else if (appArray.Length == 0)
+            {
+                labelMessage.Text = "App File Not Open";
+                return;
+            }
+            foreach (string com in SerialPort.GetPortNames())
+            {
+                if (SerialPortOpen(com, "115200"))
+                {
+                    flag = downloadStep();
+                    SerialPortClose();
+                    if(flag == true)
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+
+        private void settingForm(bool show)
+        {
+            SettingForm form = new SettingForm();
+            ToolStripMenuItemSetting.Enabled = false;
+            if (show)
+            {
+                form.ShowDialog();
             }
             else
             {
-                MessageBox.Show("Serial Open Error"
-                    , "Error"
-                    , MessageBoxButtons.OK
-                    , MessageBoxIcon.Warning);
+                form.Show();
             }
+            readyCmd = form.readyCmd;
+            boot = form.boot;
+            form.Close();
+            ToolStripMenuItemSetting.Enabled = true;
+        }
+        private void ToolStripMenuItemHelp_Click(object sender, EventArgs e)
+        {
+            settingForm(true);
         }
     }
 }
