@@ -33,6 +33,7 @@
             this.timer = new System.Windows.Forms.Timer(this.components);
             this.menuStrip = new System.Windows.Forms.MenuStrip();
             this.ToolStripMenuItemSetting = new System.Windows.Forms.ToolStripMenuItem();
+            this.ToolStripMenuItemMessage = new System.Windows.Forms.ToolStripMenuItem();
             this.ToolStripMenuItemHelp = new System.Windows.Forms.ToolStripMenuItem();
             this.buttonOpenFile = new System.Windows.Forms.Button();
             this.progressBar = new System.Windows.Forms.ProgressBar();
@@ -49,10 +50,11 @@
             // 
             this.menuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ToolStripMenuItemSetting,
+            this.ToolStripMenuItemMessage,
             this.ToolStripMenuItemHelp});
             this.menuStrip.Location = new System.Drawing.Point(0, 0);
             this.menuStrip.Name = "menuStrip";
-            this.menuStrip.Size = new System.Drawing.Size(408, 25);
+            this.menuStrip.Size = new System.Drawing.Size(404, 25);
             this.menuStrip.TabIndex = 28;
             this.menuStrip.Text = "menuStrip1";
             // 
@@ -63,6 +65,13 @@
             this.ToolStripMenuItemSetting.Text = "设置";
             this.ToolStripMenuItemSetting.ToolTipText = "设置就绪命令和Boot命令";
             this.ToolStripMenuItemSetting.Click += new System.EventHandler(this.ToolStripMenuItemHelp_Click);
+            // 
+            // ToolStripMenuItemMessage
+            // 
+            this.ToolStripMenuItemMessage.Name = "ToolStripMenuItemMessage";
+            this.ToolStripMenuItemMessage.Size = new System.Drawing.Size(44, 21);
+            this.ToolStripMenuItemMessage.Text = "信息";
+            this.ToolStripMenuItemMessage.Click += new System.EventHandler(this.ToolStripMenuItemMessage_Click);
             // 
             // ToolStripMenuItemHelp
             // 
@@ -87,10 +96,8 @@
             // 
             this.progressBar.Cursor = System.Windows.Forms.Cursors.Hand;
             this.progressBar.Location = new System.Drawing.Point(116, 41);
-            this.progressBar.MarqueeAnimationSpeed = 10;
             this.progressBar.Name = "progressBar";
-            this.progressBar.Size = new System.Drawing.Size(280, 88);
-            this.progressBar.Step = 1;
+            this.progressBar.Size = new System.Drawing.Size(276, 88);
             this.progressBar.TabIndex = 30;
             this.toolTip.SetToolTip(this.progressBar, "下载Hex文件");
             this.progressBar.Value = 100;
@@ -108,7 +115,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(408, 172);
+            this.ClientSize = new System.Drawing.Size(404, 171);
             this.Controls.Add(this.labelMessage);
             this.Controls.Add(this.progressBar);
             this.Controls.Add(this.buttonOpenFile);
@@ -120,6 +127,7 @@
             this.MinimizeBox = false;
             this.Name = "stm8s_bootload";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
+            this.Text = "stm8s_bootload";
             this.toolTip.SetToolTip(this, "stm8s_bootload by hui.liu");
             this.menuStrip.ResumeLayout(false);
             this.menuStrip.PerformLayout();
@@ -137,6 +145,7 @@
         private System.Windows.Forms.ToolTip toolTip;
         private System.Windows.Forms.Label labelMessage;
         private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItemHelp;
+        private System.Windows.Forms.ToolStripMenuItem ToolStripMenuItemMessage;
     }
 }
 

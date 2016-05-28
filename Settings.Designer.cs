@@ -91,5 +91,17 @@ namespace stm8s_bootload {
                 this["boot"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("115200")]
+        public string baud {
+            get {
+                return ((string)(this["baud"]));
+            }
+            set {
+                this["baud"] = value;
+            }
+        }
     }
 }

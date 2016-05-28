@@ -13,22 +13,23 @@ namespace stm8s_bootload
     {
         SerialPort Comm = new SerialPort();
 
-        const string appName = "stm8s_bootload";
         const uint c_u32_appAddr = 0x8000;
         const uint c_u32_bootLoadAddr = 0x9F00;
-        const uint c_u32_mcuSize = 64;
+        const uint c_u32_mcuSectorSize = 64;
 
         uint u32_resetAddr = 0;
-        
+
+        string baud = "115200";
         byte[] readyCmd = { };
         byte[] boot = { };
         byte[] appArray = { };
+
+        string message = "";
 
         public stm8s_bootload()
         {
             InitializeComponent();
             settingForm(false);
-            Text = appName;
         }
 
         #region SerialPort
@@ -67,13 +68,13 @@ namespace stm8s_bootload
         {
             bytes = new byte[Comm.BytesToRead];
             Comm.Read(bytes, 0, bytes.Length);
-            //TextBoxShowString(textBoxMessage, "Rx:" + ByteArrayToHexString(bytes, " "), "\r\n");
+            message += "Rx:" + ByteArrayToHexString(bytes, " ")+ "\r\n";
             return bytes.Length;
         }
         void commWriteData(byte[] bytes)
         {
             Comm.Write(bytes, 0, bytes.Length);
-            //TextBoxShowString(textBoxMessage, "Tx:" + ByteArrayToHexString(bytes, " "), "\r\n");
+            message += "Tx:" + ByteArrayToHexString(bytes, " ") + "\r\n";
         }
 
         #endregion
@@ -81,12 +82,13 @@ namespace stm8s_bootload
         #region File
         private void openHexFile_Click(object sender, EventArgs e)
         {
+            string fileName;
             OpenFileDialog fp_openFile = new OpenFileDialog();
             fp_openFile.Title = "打开APP文件";
             fp_openFile.Filter = "hex (*.hex)|*.hex|所有文件 (*.*)|*.*";
             if (fp_openFile.ShowDialog() == DialogResult.OK)
             {
-                Text = appName + "  " + System.IO.Path.GetFileName(fp_openFile.FileName);
+                fileName = System.IO.Path.GetFileName(fp_openFile.FileName);
 
                 HexFileStream tStream = null;
                 try
@@ -104,10 +106,43 @@ namespace stm8s_bootload
                 tStream.Read(appArray, 0, appArray.Length);
                 tStream.Close();
                 buttonOpenFile.BackColor = Color.DeepSkyBlue;
+
+                Text = "stm8s_bootload - " + fileName;
+                showMessage("Open File - " + fileName);
             }
         }
         #endregion
 
+        #region Strings
+        public string ByteArrayToHexString(Byte[] Bytes, string space)
+        {
+            string tmpShowString = "";
+            for (int i = 0; i < Bytes.Length; i++)//逐字节变为16进制字符，并以space隔开
+            {
+                tmpShowString += Bytes[i].ToString("X2") + space;
+            }
+            return tmpShowString;
+        }
+
+        void showMessage(string strings)
+        {
+            labelMessage.Text = strings;
+            message += strings + "\r\n";
+        }
+
+        void clearShowMessage()
+        {
+            labelMessage.Text = "";
+            message = "";
+        }
+        #endregion
+        private void UpdateCpuProgress()
+        {
+            string strText = this.progressBar.Value.ToString() + "%";
+            Font font = new Font("微软雅黑", (float)10, FontStyle.Regular);
+            PointF pointF = new PointF(this.progressBar.Width / 2 - 10, this.progressBar.Height / 2 - 10);
+            this.progressBar.CreateGraphics().DrawString(strText, font, Brushes.Black, pointF);
+        }
         public static void delay_ms(int milliSecond)
         {
             int start = Environment.TickCount;
@@ -162,14 +197,17 @@ namespace stm8s_bootload
         bool downloadStep()
         {
             bool downloadFlag = true;
-            byte[] respond;
             uint sectorIndex = 0;
             string fsm_downLoadStep = "fsm_downLoadReadyCmd";
+            clearShowMessage();
+            showMessage("baud is " + baud);
             while (downloadFlag)
             {
                 bool RecFlag = false;
-                respond = new byte[] { };
-                labelMessage.Text = fsm_downLoadStep;
+                byte[] respond = new byte[] { };
+                progressBar.Value = (int)(100 * sectorIndex / (appArray.Length / c_u32_mcuSectorSize));
+                showMessage(fsm_downLoadStep);
+                UpdateCpuProgress();
                 switch (fsm_downLoadStep)
                 {
                     case "fsm_downLoadReadyCmd":
@@ -205,17 +243,17 @@ namespace stm8s_bootload
                     default:
                         byte[] hex;
                         uint sectorAddr;
-                        if (appArray.Length > (sectorIndex + 1) * c_u32_mcuSize)
+                        if (appArray.Length > (sectorIndex + 1) * c_u32_mcuSectorSize)
                         {
-                            hex = new byte[c_u32_mcuSize];
+                            hex = new byte[c_u32_mcuSectorSize];
                         }
                         else
                         {
-                            hex = new byte[appArray.Length - sectorIndex * c_u32_mcuSize];
+                            hex = new byte[appArray.Length - sectorIndex * c_u32_mcuSectorSize];
                             RecFlag = true;
                         }
-                        sectorAddr = c_u32_appAddr + c_u32_mcuSize * sectorIndex;
-                        Array.Copy(appArray, sectorIndex * c_u32_mcuSize, hex, 0, hex.Length);
+                        sectorAddr = c_u32_appAddr + c_u32_mcuSectorSize * sectorIndex;
+                        Array.Copy(appArray, sectorIndex * c_u32_mcuSectorSize, hex, 0, hex.Length);
                         commWriteData(downLoadSector(hex, 0x00, sectorAddr));
 
                         if (RecFlag == true)
@@ -241,16 +279,14 @@ namespace stm8s_bootload
                     {
                         if (request.Length == 0 || request[0] != respond[0])
                         {
-                            labelMessage.Text += "Error";
                             downloadFlag = false;
                         }
                     }
                 }
-                else if(fsm_downLoadStep == "fsm_downLoadAppComplete")
+                else if (fsm_downLoadStep == "fsm_downLoadAppComplete")
                 {
                     return true;
                 }
-                progressBar.Value = (int)(100 * sectorIndex/(appArray.Length/ c_u32_mcuSize));
             }
             return false;
         }
@@ -258,30 +294,34 @@ namespace stm8s_bootload
         private void DownLoad_Click(object sender, EventArgs e)
         {
             bool flag;
-            if(readyCmd.Length == 0)
+            if(baud.Length == 0)
             {
-                labelMessage.Text = "Ready Cmd Error";
-                return;
+                showMessage("Baud Set Error");
+            }
+            if (readyCmd.Length == 0)
+            {
+                showMessage("Ready Cmd Error");
             }
             else if (boot.Length == 0)
             {
-                labelMessage.Text = "Boot Cmd Error";
-                return;
+                showMessage("Boot Cmd Error");
             }
             else if (appArray.Length == 0)
             {
-                labelMessage.Text = "App File Not Open";
-                return;
+                showMessage("App File Not Open");
             }
-            foreach (string com in SerialPort.GetPortNames())
+            else
             {
-                if (SerialPortOpen(com, "115200"))
+                foreach (string com in SerialPort.GetPortNames())
                 {
-                    flag = downloadStep();
-                    SerialPortClose();
-                    if(flag == true)
+                    if (SerialPortOpen(com, baud))
                     {
-                        return;
+                        flag = downloadStep();
+                        SerialPortClose();
+                        if (flag == true)
+                        {
+                            return;
+                        }
                     }
                 }
             }
@@ -290,7 +330,6 @@ namespace stm8s_bootload
         private void settingForm(bool show)
         {
             SettingForm form = new SettingForm();
-            ToolStripMenuItemSetting.Enabled = false;
             if (show)
             {
                 form.ShowDialog();
@@ -301,12 +340,21 @@ namespace stm8s_bootload
             }
             readyCmd = form.readyCmd;
             boot = form.boot;
+            baud = form.baud;
             form.Close();
-            ToolStripMenuItemSetting.Enabled = true;
         }
         private void ToolStripMenuItemHelp_Click(object sender, EventArgs e)
         {
             settingForm(true);
+        }
+
+        private void ToolStripMenuItemMessage_Click(object sender, EventArgs e)
+        {
+            MessageForm form = new MessageForm();
+            form.Text = "信息";
+            form.message = message;
+            form.ShowDialog();
+            form.Close();
         }
     }
 }

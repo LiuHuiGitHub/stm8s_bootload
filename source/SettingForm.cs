@@ -42,6 +42,11 @@ namespace stm8s_bootload
             get { return stringToHexArray(this.textBoxReadyCmd.Text.ToString()); }
         }
 
+        public string baud
+        {
+            get { return this.textBoxBaud.Text.ToString(); }
+        }
+
         public byte[] boot
         {
             get
@@ -70,12 +75,14 @@ namespace stm8s_bootload
         {
             textBoxReadyCmd.Text = Settings.Default.readyCmd;
             textBoxBoot.Text = Settings.Default.boot;
+            textBoxBaud.Text = Settings.Default.baud;
         }
 
         private void helpForm_Closed(object sender, FormClosedEventArgs e)
         {
             Settings.Default.readyCmd = textBoxReadyCmd.Text;
             Settings.Default.boot = textBoxBoot.Text;
+            Settings.Default.baud = textBoxBaud.Text;
             Settings.Default.Save();
         }
     }
